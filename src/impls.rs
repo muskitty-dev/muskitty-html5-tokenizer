@@ -4,7 +4,7 @@
 //! following the state machine defined in WHATWG §13.2.5.
 
 use crate::trait_def::Tokenizer;
-use crate::types::{DoctypeToken, State, TagKind, TagToken, Token};
+use crate::types::{DoctypeToken, ParseError, State, TagKind, TagToken, Token};
 
 /// A concrete HTML tokenizer.
 ///
@@ -93,9 +93,23 @@ pub struct HtmlTokenizer {
     /// decide between CDATA section state (foreign) and bogus comment
     /// state (HTML) when encountering `<![CDATA[`.
     in_foreign_content: bool,
+    /// Parse errors collected during tokenization (§13.2.5). Errors are
+    /// recorded but do not interrupt processing — the tokenizer follows
+    /// the spec's error recovery rules and continues.
+    errors: Vec<ParseError>,
 }
 
 impl HtmlTokenizer {
+    /// Record a parse error. The tokenizer continues processing after
+    /// recording the error per spec error recovery.
+    fn record_error(&mut self, error: ParseError) {
+        self.errors.push(error);
+    }
+
+    /// Return all parse errors collected so far.
+    pub fn errors(&self) -> &[ParseError] {
+        &self.errors
+    }
     /// Create a new tokenizer from a string input.
     ///
     /// The tokenizer starts in [`State::Data`] (§13.2.5.1).
@@ -125,6 +139,7 @@ impl HtmlTokenizer {
             character_reference_code: 0,
             char_ref_hex_prefix: 'x',
             in_foreign_content: false,
+            errors: Vec::new(),
         }
     }
 
@@ -433,7 +448,7 @@ impl HtmlTokenizer {
             Some('\0') => {
                 // §13.2.5.1: unexpected-null-character parse error.
                 // Emit the current input character as a character token.
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 Some(Token::Character('\0'))
             }
             Some(c) => {
@@ -470,7 +485,7 @@ impl HtmlTokenizer {
                 None
             }
             Some('\0') => {
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 Some(Token::Character('\u{FFFD}'))
             }
             Some(c) => Some(Token::Character(c)),
@@ -497,7 +512,7 @@ impl HtmlTokenizer {
                 None
             }
             Some('\0') => {
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 Some(Token::Character('\u{FFFD}'))
             }
             Some(c) => Some(Token::Character(c)),
@@ -520,7 +535,7 @@ impl HtmlTokenizer {
     fn handle_plaintext_state(&mut self) -> Option<Token> {
         match self.next_char() {
             Some('\0') => {
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 Some(Token::Character('\u{FFFD}'))
             }
             Some(c) => Some(Token::Character(c)),
@@ -861,7 +876,7 @@ impl HtmlTokenizer {
                 None
             }
             Some('\0') => {
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 Some(Token::Character('\u{FFFD}'))
             }
             Some(c) => Some(Token::Character(c)),
@@ -1085,12 +1100,12 @@ impl HtmlTokenizer {
                 None
             }
             Some('\0') => {
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 Some(Token::Character('\u{FFFD}'))
             }
             Some(c) => Some(Token::Character(c)),
             None => {
-                // TODO: record parse error (eof-in-script-html-comment-like-text)
+                self.record_error(ParseError::EofInScriptHtmlCommentLikeText);
                 self.eof_emitted = true;
                 Some(Token::EOF)
             }
@@ -1121,7 +1136,7 @@ impl HtmlTokenizer {
                 None
             }
             Some('\0') => {
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 // §13.2.5.20: Switch to ScriptDataEscaped; emit U+FFFD.
                 self.state = State::ScriptDataEscaped;
                 Some(Token::Character('\u{FFFD}'))
@@ -1133,7 +1148,7 @@ impl HtmlTokenizer {
                 Some(Token::Character(c))
             }
             None => {
-                // TODO: record parse error (eof-in-script-html-comment-like-text)
+                self.record_error(ParseError::EofInScriptHtmlCommentLikeText);
                 self.eof_emitted = true;
                 Some(Token::EOF)
             }
@@ -1164,7 +1179,7 @@ impl HtmlTokenizer {
                 Some(Token::Character('>'))
             }
             Some('\0') => {
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 // §13.2.5.21: Switch to ScriptDataEscaped; emit U+FFFD.
                 self.state = State::ScriptDataEscaped;
                 Some(Token::Character('\u{FFFD}'))
@@ -1176,7 +1191,7 @@ impl HtmlTokenizer {
                 Some(Token::Character(c))
             }
             None => {
-                // TODO: record parse error (eof-in-script-html-comment-like-text)
+                self.record_error(ParseError::EofInScriptHtmlCommentLikeText);
                 self.eof_emitted = true;
                 Some(Token::EOF)
             }
@@ -1396,12 +1411,12 @@ impl HtmlTokenizer {
                 Some(Token::Character('<'))
             }
             Some('\0') => {
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 Some(Token::Character('\u{FFFD}'))
             }
             Some(c) => Some(Token::Character(c)),
             None => {
-                // TODO: record parse error (eof-in-script-html-comment-like-text)
+                self.record_error(ParseError::EofInScriptHtmlCommentLikeText);
                 self.eof_emitted = true;
                 Some(Token::EOF)
             }
@@ -1428,7 +1443,7 @@ impl HtmlTokenizer {
                 Some(Token::Character('<'))
             }
             Some('\0') => {
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 // §13.2.5.28: Switch to ScriptDataDoubleEscaped; emit U+FFFD.
                 self.state = State::ScriptDataDoubleEscaped;
                 Some(Token::Character('\u{FFFD}'))
@@ -1440,7 +1455,7 @@ impl HtmlTokenizer {
                 Some(Token::Character(c))
             }
             None => {
-                // TODO: record parse error (eof-in-script-html-comment-like-text)
+                self.record_error(ParseError::EofInScriptHtmlCommentLikeText);
                 self.eof_emitted = true;
                 Some(Token::EOF)
             }
@@ -1469,7 +1484,7 @@ impl HtmlTokenizer {
                 Some(Token::Character('>'))
             }
             Some('\0') => {
-                // TODO: record parse error (unexpected-null-character)
+                self.record_error(ParseError::UnexpectedNullCharacter);
                 // §13.2.5.29: Switch to ScriptDataDoubleEscaped; emit U+FFFD.
                 self.state = State::ScriptDataDoubleEscaped;
                 Some(Token::Character('\u{FFFD}'))
@@ -1481,7 +1496,7 @@ impl HtmlTokenizer {
                 Some(Token::Character(c))
             }
             None => {
-                // TODO: record parse error (eof-in-script-html-comment-like-text)
+                self.record_error(ParseError::EofInScriptHtmlCommentLikeText);
                 self.eof_emitted = true;
                 Some(Token::EOF)
             }
@@ -1815,8 +1830,7 @@ impl HtmlTokenizer {
                 self.emit_ampersand_and_return()
             }
             None => {
-                // TODO: record parse error (eof-in-tag — actually not in a tag,
-                // but spec says this is an error)
+                self.record_error(ParseError::EofInTag);
                 self.emit_ampersand_and_return()
             }
             Some('#') => {
@@ -1861,11 +1875,11 @@ impl HtmlTokenizer {
                 None
             }
             Some(_c) => {
-                // TODO: record parse error (absence-of-digits-in-numeric-character-reference)
+                self.record_error(ParseError::AbsenceOfDigitsInNumericCharacterReference);
                 self.emit_ampersand_hash_and_return()
             }
             None => {
-                // TODO: record parse error
+                self.record_error(ParseError::AbsenceOfDigitsInNumericCharacterReference);
                 self.emit_ampersand_hash_and_return()
             }
         }
@@ -1884,7 +1898,7 @@ impl HtmlTokenizer {
                 None
             }
             Some(_c) => {
-                // TODO: record parse error (absence-of-digits-in-numeric-character-reference)
+                self.record_error(ParseError::AbsenceOfDigitsInNumericCharacterReference);
                 self.emit_ampersand_hash_x_and_return()
             }
             None => self.emit_ampersand_hash_x_and_return(),
@@ -1904,7 +1918,7 @@ impl HtmlTokenizer {
                 None
             }
             Some(_c) => {
-                // TODO: record parse error
+                self.record_error(ParseError::AbsenceOfDigitsInNumericCharacterReference);
                 self.emit_ampersand_hash_and_return()
             }
             None => self.emit_ampersand_hash_and_return(),
@@ -1937,13 +1951,13 @@ impl HtmlTokenizer {
                 None
             }
             Some(_c) => {
-                // TODO: record parse error (missing-semicolon-after-character-reference)
+                self.record_error(ParseError::MissingSemicolonAfterCharacterReference);
                 self.state = State::NumericCharacterReferenceEnd;
                 self.reconsume = true;
                 None
             }
             None => {
-                // TODO: record parse error
+                self.record_error(ParseError::MissingSemicolonAfterCharacterReference);
                 self.state = State::NumericCharacterReferenceEnd;
                 self.reconsume = true;
                 None
@@ -1972,7 +1986,7 @@ impl HtmlTokenizer {
                 None
             }
             Some(_c) => {
-                // TODO: record parse error (missing-semicolon-after-character-reference)
+                self.record_error(ParseError::MissingSemicolonAfterCharacterReference);
                 self.state = State::NumericCharacterReferenceEnd;
                 self.reconsume = true;
                 None
@@ -1999,17 +2013,17 @@ impl HtmlTokenizer {
 
         let ch = match code {
             0x00 => {
-                // TODO: record parse error (null-character-reference)
+                self.record_error(ParseError::NullCharacterReference);
                 '\u{FFFD}'
             }
             // Surrogate range
             0xD800..=0xDFFF => {
-                // TODO: record parse error
+                self.record_error(ParseError::SurrogateCharacterReference);
                 '\u{FFFD}'
             }
             // Beyond Unicode
             c if c > 0x10FFFF => {
-                // TODO: record parse error
+                self.record_error(ParseError::CharacterReferenceOutsideUnicodeRange);
                 '\u{FFFD}'
             }
             // Windows-1252 replacement range (0x80–0x9F, except some)
@@ -2451,7 +2465,7 @@ impl HtmlTokenizer {
             }
             Some(c) => Some(Token::Character(c)),
             None => {
-                // TODO: record parse error (eof-in-cdata)
+                self.record_error(ParseError::EofInCdata);
                 self.eof_emitted = true;
                 Some(Token::EOF)
             }
@@ -2510,7 +2524,7 @@ impl HtmlTokenizer {
                 None
             }
             None => {
-                // TODO: record parse error (eof-in-cdata)
+                self.record_error(ParseError::EofInCdata);
                 self.pending_tokens.push(Token::Character(']'));
                 self.pending_tokens.push(Token::Character(']'));
                 self.state = State::CDATASection;

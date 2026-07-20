@@ -20,4 +20,4 @@ mod types;
 
 pub use impls::HtmlTokenizer;
 pub use trait_def::Tokenizer;
-pub use types::{DoctypeToken, State, TagKind, TagToken, Token};
+pub use types::{DoctypeToken, ParseError, State, TagKind, TagToken, Token};

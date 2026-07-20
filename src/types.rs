@@ -272,3 +272,33 @@ pub enum State {
     /// §13.2.5.85 Numeric character reference end state
     NumericCharacterReferenceEnd,
 }
+
+/// Parse errors defined by WHATWG §13.2.5.
+///
+/// Each variant corresponds to a spec-mandated parse error condition.
+/// The tokenizer records these as it encounters them but does not stop —
+/// error recovery continues per the spec.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParseError {
+    /// U+0000 NULL in input stream where it is not allowed.
+    UnexpectedNullCharacter,
+    /// EOF encountered inside a script/html comment-like text section.
+    EofInScriptHtmlCommentLikeText,
+    /// EOF encountered in a CDATA section.
+    EofInCdata,
+    /// EOF encountered while processing a character reference.
+    EofInTag,
+    /// Numeric character reference without digits after `&#` or `&#x`.
+    AbsenceOfDigitsInNumericCharacterReference,
+    /// Character reference without a terminating semicolon (valid
+    /// reference consumed anyway per spec recovery).
+    MissingSemicolonAfterCharacterReference,
+    /// NULL character reference `&#0;` or `&#x0;`.
+    NullCharacterReference,
+    /// Numeric character reference resolves to a surrogate code point
+    /// (U+D800–U+DFFF).
+    SurrogateCharacterReference,
+    /// Numeric character reference resolves to a value outside the
+    /// Unicode range (> U+10FFFF).
+    CharacterReferenceOutsideUnicodeRange,
+}
