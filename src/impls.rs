@@ -59,6 +59,14 @@ pub struct HtmlTokenizer {
     current_attr_name: String,
     /// The attribute value currently being accumulated (attribute value states).
     current_attr_value: String,
+    /// 当前 tag 已收下的属性名集合（F-5）：`emit_current_attribute` 用它做
+    /// 重复检查，替代对 `attrs` 的 O(n²) 线性扫描（审计 T3）。每个新 tag
+    /// 创建时清空。
+    current_attr_names: std::collections::HashSet<String>,
+    /// F-6 测试注入点：覆盖 `next_token` 的步数上限以强制触发降级路径
+    /// （仅测试构建；`Some(0)` = 立即耗尽）。
+    #[cfg(test)]
+    test_step_bound: Option<usize>,
     /// The DOCTYPE token currently being built (§13.2.5.53–§13.2.5.68).
     /// Reset when entering DOCTYPE states via MarkupDeclarationOpen.
     current_doctype: DoctypeToken,
@@ -126,6 +134,7 @@ impl HtmlTokenizer {
             current_pi: None,
             current_attr_name: String::new(),
             current_attr_value: String::new(),
+            current_attr_names: std::collections::HashSet::new(),
             current_doctype: DoctypeToken {
                 name: None,
                 public_id: None,
@@ -140,6 +149,8 @@ impl HtmlTokenizer {
             char_ref_hex_prefix: 'x',
             in_foreign_content: false,
             errors: Vec::new(),
+            #[cfg(test)]
+            test_step_bound: None,
         }
     }
 
@@ -357,7 +368,25 @@ impl Tokenizer for HtmlTokenizer {
         // or reaches EOF (which sets eof_emitted and returns EOF, after
         // which the step guard returns None and we break out). A safety
         // bound guards against any latent state-machine bug hanging forever.
-        let mut bound = 1_000_000;
+        //
+        // F-6（审计 H-M6 + F-5 性能测试的新发现）：
+        // 1. 上限随输入规模缩放。固定 1_000_000 步可被**合法**输入触达：
+        //    一个 tag 的全部属性在单个 `next_token()` 调用内累积（tag 完成
+        //    前不产出 token），10 万属性 ≈ 120 万步即 panic——远程 DoS。
+        //    推导：每个输入码点至多被处理一个有界常数次（reconsume 链
+        //    < 10），故总步数 ≤ ~10 × len + 转移开销；取 10 × len + 1024。
+        // 2. 耗尽时降级而非 panic。panic 把内部不变量疑点放大为进程
+        //    abort（远程 DoS）；降级为停止产出（等同 EOF），调用方按
+        //    EOF 完成解析。此路径仍只在状态机 bug（不可能的输入）下可达。
+        #[allow(unused_mut)]
+        let mut bound = 10 * self.input.len() + 1024;
+        #[cfg(test)]
+        {
+            // 测试注入点：强制步数耗尽，验证降级路径（见 mod tests）。
+            if let Some(b) = self.test_step_bound {
+                bound = b;
+            }
+        }
         while bound > 0 {
             bound -= 1;
             match self.step() {
@@ -371,12 +400,9 @@ impl Tokenizer for HtmlTokenizer {
                 }
             }
         }
-        // Unreachable for a conforming input — every transition terminates.
-        // Reached only if a state-machine bug causes a non-productive cycle.
-        // Surface it loudly rather than spinning silently.
-        panic!(
-            "tokenizer state machine made no progress; probable reconsume/infinite-transition bug"
-        );
+        // 步数耗尽：状态机 bug 兜底。降级为 EOF（F-6），不再 panic。
+        self.eof_emitted = true;
+        None
     }
 
     fn set_state(&mut self, state: State) {
@@ -585,6 +611,8 @@ impl HtmlTokenizer {
                 let mut name = String::new();
                 name.push(c.to_ascii_lowercase());
                 self.temporary_buffer.push(c);
+                // F-5：新 tag 开始，重置该 tag 的属性名集合。
+                self.current_attr_names.clear();
                 self.current_tag = Some(TagToken {
                     kind: TagKind::End,
                     name,
@@ -748,6 +776,8 @@ impl HtmlTokenizer {
                 let mut name = String::new();
                 name.push(c.to_ascii_lowercase());
                 self.temporary_buffer.push(c);
+                // F-5：新 tag 开始，重置该 tag 的属性名集合。
+                self.current_attr_names.clear();
                 self.current_tag = Some(TagToken {
                     kind: TagKind::End,
                     name,
@@ -931,6 +961,8 @@ impl HtmlTokenizer {
                 let mut name = String::new();
                 name.push(c.to_ascii_lowercase());
                 self.temporary_buffer.push(c);
+                // F-5：新 tag 开始，重置该 tag 的属性名集合。
+                self.current_attr_names.clear();
                 self.current_tag = Some(TagToken {
                     kind: TagKind::End,
                     name,
@@ -1261,6 +1293,8 @@ impl HtmlTokenizer {
                 let mut name = String::new();
                 name.push(c.to_ascii_lowercase());
                 self.temporary_buffer.push(c);
+                // F-5：新 tag 开始，重置该 tag 的属性名集合。
+                self.current_attr_names.clear();
                 self.current_tag = Some(TagToken {
                     kind: TagKind::End,
                     name,
@@ -1644,6 +1678,8 @@ impl HtmlTokenizer {
             Some(c) if c.is_ascii_alphabetic() => {
                 let mut name = String::new();
                 name.push(c.to_ascii_lowercase());
+                // F-5：新 tag 开始，重置该 tag 的属性名集合。
+                self.current_attr_names.clear();
                 self.current_tag = Some(TagToken {
                     kind: TagKind::Start,
                     name,
@@ -1684,6 +1720,8 @@ impl HtmlTokenizer {
             Some(c) if c.is_ascii_alphabetic() => {
                 let mut name = String::new();
                 name.push(c.to_ascii_lowercase());
+                // F-5：新 tag 开始，重置该 tag 的属性名集合。
+                self.current_attr_names.clear();
                 self.current_tag = Some(TagToken {
                     kind: TagKind::End,
                     name,
@@ -2376,11 +2414,16 @@ impl HtmlTokenizer {
             // §13.2.5.32 / §13.2.6.3: duplicate attribute names are a parse
             // error; the new (duplicate) attribute is dropped, keeping the
             // first. Verified by html5lib: `<h a='b' a='d'>` → one attr a="b".
-            if tag.attrs.iter().any(|(n, _)| *n == name) {
+            //
+            // F-5（审计 T3）：重复检查由对 `attrs` 的 O(n²) 线性扫描改为
+            // HashSet——单 tag 属性数不受限时，~17.5 万属性即 ~1.5×10^10 次
+            // 字符串比较（数秒到分钟级挂起）。`insert` 消费 `name`，成功路径
+            // 克隆一份入 `attrs`；重复路径直接丢弃，与旧语义一致。
+            if self.current_attr_names.insert(name.clone()) {
+                tag.attrs.push((name, value));
+            } else {
                 // TODO: parse error (duplicate-attribute)
-                return;
             }
-            tag.attrs.push((name, value));
         }
     }
 
@@ -3920,6 +3963,85 @@ mod tests {
         let token = t.next_token();
         assert_eq!(token, Some(Token::Character('a')));
         assert_eq!(t.state(), State::Data);
+    }
+
+    // —— F-5: 属性名重复检查 HashSet 化 ——
+
+    /// §13.2.6.3: 重复属性保留首个（html5lib: `<h a='b' a='d'>` → a="b"）。
+    #[test]
+    fn duplicate_attribute_keeps_first() {
+        let mut t = HtmlTokenizer::new("<h a='b' a='d'>");
+        let mut tag = None;
+        while let Some(tok) = t.next_token() {
+            if let Token::Tag(ref tag_tok) = tok {
+                tag = Some(tag_tok.attrs.clone());
+            }
+            if matches!(tok, Token::EOF) {
+                break;
+            }
+        }
+        let tag = tag.expect("tag token emitted");
+        assert_eq!(tag, vec![("a".to_string(), "b".to_string())]);
+    }
+
+    /// 审计 T3：单 tag 属性数不受限。修复前对 `attrs` 逐个线性扫描，
+    /// 10 万属性 ≈ 5×10^9 次比较（分钟级挂起）；HashSet 化后应瞬时完成。
+    /// 本测试既是回归测试也是隐式性能测试——O(n²) 回归会令 CI 超时。
+    #[test]
+    fn large_attribute_count_tag_parses_linearly() {
+        const N: usize = 100_000;
+        let mut input = String::with_capacity(N * 10);
+        input.push_str("<p");
+        for i in 0..N {
+            input.push_str(&format!(" a{i}={i}"));
+        }
+        input.push('>');
+        let mut t = HtmlTokenizer::new(&input);
+        let mut attrs = 0;
+        while let Some(tok) = t.next_token() {
+            if let Token::Tag(ref tag_tok) = tok {
+                attrs = tag_tok.attrs.len();
+            }
+            if matches!(tok, Token::EOF) {
+                break;
+            }
+        }
+        assert_eq!(attrs, N, "all distinct attributes must be kept");
+    }
+
+    /// 重复与去重混排：首个胜出的同时不吞掉后续不同名属性。
+    #[test]
+    fn duplicate_then_distinct_attributes_all_kept() {
+        let mut t = HtmlTokenizer::new("<p x=1 x=2 y=3>");
+        let mut attrs = Vec::new();
+        while let Some(tok) = t.next_token() {
+            if let Token::Tag(ref tag_tok) = tok {
+                attrs = tag_tok.attrs.clone();
+            }
+            if matches!(tok, Token::EOF) {
+                break;
+            }
+        }
+        assert_eq!(
+            attrs,
+            vec![
+                ("x".to_string(), "1".to_string()),
+                ("y".to_string(), "3".to_string()),
+            ]
+        );
+    }
+
+    // —— F-6: 步数兜底降级 ——
+
+    /// 步数耗尽 → 降级返回 None（等同 EOF），不再 panic（F-6 前为
+    /// `panic!`，任何触达即进程 abort）。
+    #[test]
+    fn step_bound_exhaustion_degrades_to_eof_not_panic() {
+        let mut t = HtmlTokenizer::new("<p a=1>");
+        t.test_step_bound = Some(0);
+        assert_eq!(t.next_token(), None);
+        // 降级后流已终结：后续调用同样返回 None。
+        assert_eq!(t.next_token(), None);
     }
 
     #[test]
