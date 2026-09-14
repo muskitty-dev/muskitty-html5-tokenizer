@@ -1,2 +1,5 @@
 # Rust build artifacts
 target/
+# Library crate: the lock file is generated locally by `cargo test` and is not
+# versioned (same convention as the other split crates in this org).
+Cargo.lock
