@@ -1,0 +1,119 @@
+{"tests": [
+
+{"description":"<? at EOF: EOF in the processing instruction open state emits only an EOF token",
+"input":"<?",
+"output":[]},
+
+{"description":"<?x at EOF: EOF in the processing instruction target state discards the instruction",
+"input":"<?x",
+"output":[]},
+
+{"description":"<?1>: invalid first character of a processing instruction target → bogus comment",
+"input":"<?1>",
+"output":[["Comment","?1"]]},
+
+{"description":"<?!>: invalid first character of a processing instruction target → bogus comment",
+"input":"<?!>",
+"output":[["Comment","?!"]]},
+
+{"description":"<?_a>: underscore is a legal first character of a processing instruction target",
+"input":"<?_a>",
+"output":[["ProcessingInstruction","_a",""]]},
+
+{"description":"<?a>: minimal processing instruction with empty data",
+"input":"<?a>",
+"output":[["ProcessingInstruction","a",""]]},
+
+{"description":"<?a1-b_>: ASCII alphanumerics, hyphen and underscore are legal target characters",
+"input":"<?a1-b_>",
+"output":[["ProcessingInstruction","a1-b_",""]]},
+
+{"description":"<?a b>: whitespace after the target is ignored, data starts at b",
+"input":"<?a b>",
+"output":[["ProcessingInstruction","a","b"]]},
+
+{"description":"<?a    b>: runs of whitespace after the target are ignored",
+"input":"<?a    b>",
+"output":[["ProcessingInstruction","a","b"]]},
+
+{"description":"<?a\\t b>: tab and space after the target are ignored",
+"input":"<?a\t b>",
+"output":[["ProcessingInstruction","a","b"]]},
+
+{"description":"<?a?>: a question mark terminates the target and immediately closes the instruction",
+"input":"<?a?>",
+"output":[["ProcessingInstruction","a",""]]},
+
+{"description":"<?a?b>: a lone question mark before the closing > becomes part of the data",
+"input":"<?a?b>",
+"output":[["ProcessingInstruction","a","?b"]]},
+
+{"description":"<?a??b>: question marks inside the data are preserved",
+"input":"<?a??b>",
+"output":[["ProcessingInstruction","a","??b"]]},
+
+{"description":"<?a b?c>: a question mark inside the data does not end the instruction",
+"input":"<?a b?c>",
+"output":[["ProcessingInstruction","a","b?c"]]},
+
+{"description":"<?a b?c?>: the data is preserved verbatim before the closing >?",
+"input":"<?a b?c?>",
+"output":[["ProcessingInstruction","a","b?c"]]},
+
+{"description":"<?a/>: solidus is not a legal target character → bogus comment",
+"input":"<?a/>",
+"output":[["Comment","?a/"]]},
+
+{"description":"<?a!>: exclamation mark is not a legal target character → bogus comment",
+"input":"<?a!>",
+"output":[["Comment","?a!"]]},
+
+{"description":"<?a\\u0000>: NUL is not a legal target character → bogus comment, NUL becomes U+FFFD",
+"doubleEscaped":true,
+"input":"<?a\\u0000>",
+"output":[["Comment","?a\\uFFFD"]]},
+
+{"description":"<?xml> is a disallowed target → bogus comment",
+"input":"<?xml>",
+"output":[["Comment","?xml"]]},
+
+{"description":"<?XML> disallowed target match is ASCII case-insensitive",
+"input":"<?XML>",
+"output":[["Comment","?XML"]]},
+
+{"description":"<?xMl> disallowed target match is ASCII case-insensitive",
+"input":"<?xMl>",
+"output":[["Comment","?xMl"]]},
+
+{"description":"<?xml-stylesheet> is a disallowed target → bogus comment",
+"input":"<?xml-stylesheet>",
+"output":[["Comment","?xml-stylesheet"]]},
+
+{"description":"<?XML-Stylesheet> disallowed target match is ASCII case-insensitive",
+"input":"<?XML-Stylesheet>",
+"output":[["Comment","?XML-Stylesheet"]]},
+
+{"description":"<?xmlx> is not a disallowed target (exact match is required)",
+"input":"<?xmlx>",
+"output":[["ProcessingInstruction","xmlx",""]]},
+
+{"description":"<?xml0> is not a disallowed target (exact match is required)",
+"input":"<?xml0>",
+"output":[["ProcessingInstruction","xml0",""]]},
+
+{"description":"<?xml-stylesheet0> is not a disallowed target (exact match is required)",
+"input":"<?xml-stylesheet0>",
+"output":[["ProcessingInstruction","xml-stylesheet0",""]]},
+
+{"description":"<?xml at EOF: EOF is reported before the disallowed-target check runs",
+"input":"<?xml",
+"output":[]},
+
+{"description":"<?x? at EOF: EOF in the processing instruction data state discards the instruction",
+"input":"<?x?",
+"output":[]},
+
+{"description":"<?a b?c at EOF: EOF in the questionable state discards the instruction",
+"input":"<?a b?c",
+"output":[]}
+]}
