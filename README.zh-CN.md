@@ -17,7 +17,7 @@
 
 | 组件 | 规范覆盖率 | 测试通过率 |
 |------|------------|------------|
-| **Tokenizer** (§13.2.5) | 85/85 states | [99.8%](https://github.com/html5lib/html5lib-tests) (7022/7036) |
+| **Tokenizer** (§13.2.5) | 85/85 states | [100%](https://github.com/html5lib/html5lib-tests) (7051/7051) |
 
 - 零 `unsafe` 代码
 - 零 C/C++ 依赖
@@ -31,7 +31,7 @@
 
 ```toml
 [dependencies]
-muskitty-html5-tokenizer = "0.1.0"
+muskitty-html5-tokenizer = "0.1.4"
 ```
 
 或运行：
@@ -80,17 +80,17 @@ RCDATA）。
 ## 构建
 
 ```bash
-cargo check                               # Workspace check
-cargo check -p muskitty-html5-tokenizer   # Tokenizer crate only
+# 在本 crate 目录内运行（独立 workspace）
+cargo check
 ```
 
 ## 测试
 
 ```bash
-# Unit tests (145 tests)
-cargo test -p muskitty-html5-tokenizer --lib
+# Unit tests (149 tests)
+cargo test --lib
 
-# html5lib tokenizer suite (7036 tests)
+# html5lib tokenizer suite (7051 tests)
 cargo test --test html5lib_tokenizer -- --nocapture
 
 # All tests
@@ -101,7 +101,7 @@ cargo test
 
 测试使用 [html5lib-tests](https://github.com/html5lib/html5lib-tests) 套件：
 
-- `tests/data/tokenizer/*.test` — 14 个分词器夹具文件
+- `tests/data/tokenizer/*.test` — 15 个分词器夹具文件
 
 ## 设计原则
 

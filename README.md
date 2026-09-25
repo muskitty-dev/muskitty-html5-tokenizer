@@ -17,7 +17,7 @@ Part of the [MusKitty](https://github.com/muskitty-dev) browser engine project.
 
 | Component | Spec Coverage | Test Pass Rate |
 |-----------|---------------|----------------|
-| **Tokenizer** (§13.2.5) | 85/85 states | [99.8%](https://github.com/html5lib/html5lib-tests) (7022/7036) |
+| **Tokenizer** (§13.2.5) | 85/85 states | [100%](https://github.com/html5lib/html5lib-tests) (7051/7051) |
 
 - Zero `unsafe` code
 - Zero C/C++ dependencies
@@ -31,7 +31,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-muskitty-html5-tokenizer = "0.1.0"
+muskitty-html5-tokenizer = "0.1.4"
 ```
 
 Or run:
@@ -82,17 +82,17 @@ constructor can switch content models (Data → RCDATA when entering
 ## Building
 
 ```bash
-cargo check                               # Workspace check
-cargo check -p muskitty-html5-tokenizer   # Tokenizer crate only
+# Run from inside this crate (standalone workspace)
+cargo check
 ```
 
 ## Testing
 
 ```bash
-# Unit tests (145 tests)
-cargo test -p muskitty-html5-tokenizer --lib
+# Unit tests (149 tests)
+cargo test --lib
 
-# html5lib tokenizer suite (7036 tests)
+# html5lib tokenizer suite (7051 tests)
 cargo test --test html5lib_tokenizer -- --nocapture
 
 # All tests
@@ -103,7 +103,7 @@ cargo test
 
 Tests use the [html5lib-tests](https://github.com/html5lib/html5lib-tests) suite:
 
-- `tests/data/tokenizer/*.test` — 14 tokenizer fixture files
+- `tests/data/tokenizer/*.test` — 15 tokenizer fixture files
 
 ## Design Principles
 
